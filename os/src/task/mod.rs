@@ -14,7 +14,9 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr, VPNRange, VirtPageNum};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -153,6 +155,60 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// Get the current task status
+    fn get_task_status(&self) -> TaskStatus {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].task_status
+    }
+
+    /// Get the current task syscall times
+    fn get_task_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].task_syscall_times
+    }
+
+    /// Add the current task syscall times
+    fn add_task_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].task_syscall_times[syscall_id] += 1;
+    }
+
+    /// Memory map
+    fn mmap(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current]
+            .memory_set
+            .insert_framed_area(start_va, end_va, permission);
+    }
+
+    fn unmap(&self, start_va: VirtAddr, end_va: VirtAddr) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current]
+            .memory_set
+            .remove_framed_area(start_va, end_va);
+    }
+
+    fn check_map(&self, start_va: VirtAddr, end_va: VirtAddr, is_mapped: bool) -> bool {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let memory_set = &inner.tasks[current].memory_set;
+        // .check_map(start_va, end_va, is_mapped)
+
+        for vpn in VPNRange::new(VirtPageNum::from(start_va), end_va.ceil()) {
+            if let Some(pte) = memory_set.translate(vpn) {
+                if pte.is_valid() != is_mapped {
+                    return false;
+                }
+            }
+        }
+        true
+    }
 }
 
 /// Run the first task in task list.
@@ -201,4 +257,34 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Get the current task status
+pub fn get_task_status() -> TaskStatus {
+    TASK_MANAGER.get_task_status()
+}
+
+/// Get the current task syscall times
+pub fn get_task_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    TASK_MANAGER.get_task_syscall_times()
+}
+
+/// Add the current task syscall times
+pub fn add_task_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.add_task_syscall_times(syscall_id);
+}
+
+/// Memory map
+pub fn task_mmap(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+    TASK_MANAGER.mmap(start_va, end_va, permission);
+}
+
+/// Memory unmap
+pub fn task_unmap(start_va: VirtAddr, end_va: VirtAddr) {
+    TASK_MANAGER.unmap(start_va, end_va);
+}
+
+/// Check memory map
+pub fn task_check_map(start_va: VirtAddr, end_va: VirtAddr, is_mapped: bool) -> bool {
+    TASK_MANAGER.check_map(start_va, end_va, is_mapped)
 }
