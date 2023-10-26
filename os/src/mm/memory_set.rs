@@ -75,6 +75,22 @@ impl MemorySet {
     /// Add a new MapArea into this MemorySet.
     /// Assuming that there are no conflicts in the virtual address
     /// space.
+    /// Assume that no conflicts.
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) {
+        let mut map_area = MapArea::new(start_va, end_va, MapType::Framed, MapPermission::U);
+        map_area.unmap(&mut self.page_table);
+    }
+    /// Check map
+    pub fn check_map(&self, start_va: VirtAddr, end_va: VirtAddr, is_mapped: bool) -> bool {
+        let map_area = MapArea::new(start_va, end_va, MapType::Framed, MapPermission::U);
+        let page_table = &self.page_table;
+        for vpn in map_area.vpn_range {
+            if page_table.check(vpn) != is_mapped {
+                return false;
+            }
+        }
+        true
+    }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
