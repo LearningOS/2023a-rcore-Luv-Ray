@@ -1,11 +1,14 @@
 //! Process management syscalls
 use core::mem;
 
+use alloc::sync::Arc;
+
 use crate::{
     config::MAX_SYSCALL_NUM,
-    mm::{translated_byte_buffer, MapPermission, VirtAddr},
+    loader::get_app_data_by_name,
+    mm::{translated_byte_buffer, translated_refmut, translated_str, MapPermission, VirtAddr},
     task::{
-        change_program_brk, current_user_token, exit_current_and_run_next, get_task_status,
+        add_task, current_task, current_user_token, exit_current_and_run_next, get_task_status,
         get_task_syscall_times, suspend_current_and_run_next, task_check_map, task_mmap,
         task_unmap, TaskStatus,
     },
@@ -80,7 +83,11 @@ pub fn sys_exec(path: *const u8) -> isize {
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
 pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
-    trace!("kernel::pid[{}] sys_waitpid [{}]", current_task().unwrap().pid.0, pid);
+    trace!(
+        "kernel::pid[{}] sys_waitpid [{}]",
+        current_task().unwrap().pid.0,
+        pid
+    );
     let task = current_task().unwrap();
     // find a child process
 
@@ -205,7 +212,7 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap!");
     let v_start = VirtAddr(start);
     let v_end = VirtAddr(start + len);
-    
+
     if !v_start.aligned() {
         return -1;
     }

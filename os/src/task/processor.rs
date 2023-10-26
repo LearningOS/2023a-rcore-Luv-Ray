@@ -7,6 +7,8 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::config::MAX_SYSCALL_NUM;
+use crate::mm::{MapPermission, VPNRange, VirtAddr, VirtPageNum};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -43,6 +45,57 @@ impl Processor {
     ///Get current task in cloning semanteme
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
+    }
+
+    /// Get the current task status
+    fn get_task_status(&self) -> TaskStatus {
+        self.current().unwrap().inner_exclusive_access().task_status
+    }
+
+    /// Get the current task syscall times
+    fn get_task_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        self.current()
+            .unwrap()
+            .inner_exclusive_access()
+            .task_syscall_times
+    }
+
+    /// Add the current task syscall times
+    fn add_task_syscall_times(&self, syscall_id: usize) {
+        self.current()
+            .unwrap()
+            .inner_exclusive_access()
+            .task_syscall_times[syscall_id] += 1;
+    }
+
+    /// Memory map
+    fn mmap(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+        self.current()
+            .unwrap()
+            .inner_exclusive_access()
+            .memory_set
+            .insert_framed_area(start_va, end_va, permission);
+    }
+
+    fn unmap(&self, start_va: VirtAddr, end_va: VirtAddr) {
+        self.current()
+            .unwrap()
+            .inner_exclusive_access()
+            .memory_set
+            .remove_framed_area(start_va, end_va);
+    }
+
+    fn check_map(&self, start_va: VirtAddr, end_va: VirtAddr, is_mapped: bool) -> bool {
+        let current = self.current().unwrap();
+        let memory_set = &current.inner_exclusive_access().memory_set;
+        for vpn in VPNRange::new(VirtPageNum::from(start_va), end_va.ceil()) {
+            if let Some(pte) = memory_set.translate(vpn) {
+                if pte.is_valid() != is_mapped {
+                    return false;
+                }
+            }
+        }
+        true
     }
 }
 
@@ -108,4 +161,40 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+
+/// Get the current task status
+pub fn get_task_status() -> TaskStatus {
+    PROCESSOR.exclusive_access().get_task_status()
+}
+
+/// Get the current task syscall times
+pub fn get_task_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    PROCESSOR.exclusive_access().get_task_syscall_times()
+}
+
+/// Add the current task syscall times
+pub fn add_task_syscall_times(syscall_id: usize) {
+    PROCESSOR
+        .exclusive_access()
+        .add_task_syscall_times(syscall_id);
+}
+
+/// Memory map
+pub fn task_mmap(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
+    PROCESSOR
+        .exclusive_access()
+        .mmap(start_va, end_va, permission);
+}
+
+/// Memory unmap
+pub fn task_unmap(start_va: VirtAddr, end_va: VirtAddr) {
+    PROCESSOR.exclusive_access().unmap(start_va, end_va);
+}
+
+/// Check memory map
+pub fn task_check_map(start_va: VirtAddr, end_va: VirtAddr, is_mapped: bool) -> bool {
+    PROCESSOR
+        .exclusive_access()
+        .check_map(start_va, end_va, is_mapped)
 }
