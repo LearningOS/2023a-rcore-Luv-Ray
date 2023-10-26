@@ -1,6 +1,20 @@
 # 完成功能
+完成 `sys_task_info` 系统调用，获取三个信息：任务状态、任务使用的系统调用及调用次数、任务总运行时长（单位ms）
+
+调用次数由 TCB 维护，每次系统调用时根据 syscall_id 更新。
+
+总体没什么难度。
 
 # 问答题
+1. `ch2b_bad_address`: 
+
+        ELF�@�@8@: not found
+
+        Syntax error: word unexpected (expecting ")")
+
+    `ch2b_bad_address`
+2. 
+    1. 
 
 **荣誉准则**
 ----------------
