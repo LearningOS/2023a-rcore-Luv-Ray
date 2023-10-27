@@ -237,19 +237,40 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-pub fn sys_spawn(_path: *const u8) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
+pub fn sys_spawn(path: *const u8) -> isize {
+    trace!("kernel:pid[{}] sys_spawn", current_task().unwrap().pid.0);
+
+    let path = translated_str(current_user_token(), path);
+    if let Some(data) = get_app_data_by_name(&path) {
+        let elf = match xmas_elf::ElfFile::new(data) {
+            Ok(elf) => elf,
+            _ => return -1,
+        };
+        if elf.header.pt1.magic != [0x7f, 0x45, 0x4c, 0x46] {
+            return -1;
+        }
+
+        let tcb = current_task().unwrap().spawn(data);
+        let pid = tcb.getpid();
+        add_task(tcb);
+        return pid as isize;
+    }
     -1
 }
 
 // YOUR JOB: Set task priority.
-pub fn sys_set_priority(_prio: isize) -> isize {
+pub fn sys_set_priority(prio: isize) -> isize {
     trace!(
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    if prio <= 1 {
+        -1
+    } else {
+        current_task()
+            .unwrap()
+            .inner_exclusive_access()
+            .set_prio(prio as usize);
+        0
+    }
 }
