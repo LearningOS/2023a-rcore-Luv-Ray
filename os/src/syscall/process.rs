@@ -271,6 +271,6 @@ pub fn sys_set_priority(prio: isize) -> isize {
             .unwrap()
             .inner_exclusive_access()
             .set_prio(prio as usize);
-        0
+        prio
     }
 }
