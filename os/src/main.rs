@@ -39,6 +39,7 @@ pub mod drivers;
 pub mod fs;
 pub mod lang_items;
 pub mod logging;
+pub mod loader;
 pub mod mm;
 pub mod sbi;
 pub mod sync;

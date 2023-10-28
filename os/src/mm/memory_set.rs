@@ -81,6 +81,11 @@ impl MemorySet {
     /// Add a new MapArea into this MemorySet.
     /// Assuming that there are no conflicts in the virtual address
     /// space.
+    /// Assume that no conflicts.
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) {
+        let mut map_area = MapArea::new(start_va, end_va, MapType::Framed, MapPermission::U);
+        map_area.unmap(&mut self.page_table);
+    }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
